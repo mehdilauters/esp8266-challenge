@@ -6,6 +6,10 @@
 #include "osapi.h"
 #include "user_interface.h"
 
+#include "mutex.h"
+
+#define T uint8_t
+#include "fifo.h"
 
 #ifdef USE_SSL
 # define CONNECT(conn) espconn_secure_connect( conn )
@@ -23,13 +27,17 @@ unsigned int default_private_key_len = 0;
 # define SEND(conn, buffer, len) espconn_sent(conn, buffer, len)
 #endif
 
-#define user_procTaskPrio        0
-#define user_procTaskQueueLen    1
+#define feed_taskPrio        2
+#define feed_taskQueueLen    10
 
-os_event_t    user_procTaskQueue[user_procTaskQueueLen];
-static void user_procTask(os_event_t *events);
+os_event_t    feed_taskQueue[feed_taskQueueLen];
+static void feed_task(os_event_t *events);
 
+#define send_taskPrio        1
+#define send_taskQueueLen    10
 
+os_event_t    send_taskQueue[send_taskQueueLen];
+static void send_task(os_event_t *events);
 
 static volatile os_timer_t second_timer;
 
@@ -39,12 +47,11 @@ struct espconn m_conn;
 esp_tcp m_tcp;
 
 int m_port = 0;
+char m_send_buffer[MAX_BUFFER_SIZE];
 char m_buffer[MAX_BUFFER_SIZE];
-int m_size = 0;
-int m_total_size = 0;
-
-
-bool send = false;
+uint64_t m_to_send = 0;
+fifo_t m_fifo;
+mutex_t m_mutex;
 
 volatile uint64_t m_seconds = 0;
 
@@ -73,59 +80,56 @@ void ICACHE_FLASH_ATTR process_uart() {
 
 
 
-void test_send_data(void *arg, char *_data, int _len)
+void test_send_data()
 {
-  send = false;
-  os_printf( ">>>>%s %d/%d\n", __FUNCTION__, _len, m_size);
-  m_total_size += _len;
-  struct espconn *conn = arg;
-  SEND( conn, _data, _len );
+  if(GetMutex(&m_mutex))
+  {
+    os_memset(m_send_buffer,0, MAX_BUFFER_SIZE);
+    int len = MAX_BUFFER_SIZE;
+    if(fifo_size(&m_fifo) < len)
+    {
+      len = fifo_size(&m_fifo);
+    }
+    int i;
+    for(i = 0; i < len; i++)
+    {
+      m_send_buffer[i] = fifo_pop(&m_fifo);
+    }
+//     os_printf( ">>>>%s %s\n", __FUNCTION__, m_send_buffer);
+    
+    SEND( &m_conn, m_send_buffer, len );
+  }
 }
 
-
 static void ICACHE_FLASH_ATTR
-user_procTask(os_event_t *events)
+feed_task(os_event_t *events)
 {
   process_uart();
   os_delay_us(1000);
-  if(send)
+  
+  
+#ifdef TEST
+  const char * data = TEST;
+  int len = os_strlen(data);
+  GetMutex(&m_mutex);
+  while(! fifo_isfull(&m_fifo) )
   {
-    test_send_data(&m_conn, m_buffer, m_size);
+    fifo_push(&m_fifo, data[m_to_send%len]);
+    m_to_send ++;
   }
-  system_os_post(user_procTaskPrio, 0, 0 );
+  ReleaseMutex(&m_mutex);
+#else
+  
+#endif
+  test_send_data();
+  
+  system_os_post(feed_taskPrio, 0, 0 );
 }
 
 
 void data_received( void *arg, char *pdata, unsigned short len )
 {
   os_printf( "%s: %s\n", __FUNCTION__, pdata );
-  int i=0;
-  for(i=0; i < len; i++)
-  {
-    if(pdata[i] == '-')
-    {
-      os_printf("Data transmission fails\n");
-    }
-    else if(pdata[i] == '+')
-    {
-      os_printf("Data transmission OK %d\n",m_total_size);
-    }
-    else
-    {
-      os_printf("protocol error\n");
-    }
-  }
-  
-  if(m_total_size % m_size == 0)
-  {
-    send = true;
-    os_printf("Data transmission OK %d\n",m_total_size); 
-  }
-  
-  if(get_seconds() > 0)
-  {
-    os_printf("rate=>%d b/s\n",(float)m_size / (float)get_seconds());
-  }  
 }
 
 
@@ -144,25 +148,11 @@ void tcp_disconnected( void *arg )
 
 void data_sent(void *arg)
 {
+  ReleaseMutex(&m_mutex);
   os_printf( "%s\n", __FUNCTION__);
   struct espconn *conn = arg;
 }
 
-void test_send_test_data(void *arg)
-{
-  os_printf( "%s\n", __FUNCTION__);
-  m_size = 0;
-  os_memset(m_buffer, 0, MAX_BUFFER_SIZE);
-  
-  //fill buffer
-  while(m_size < MAX_BUFFER_SIZE - strlen(TEST) -1)
-  { 
-    os_memcpy( m_buffer+m_size, TEST, strlen(TEST) );
-    m_size += strlen(TEST);
-  }
-  
-  send = true;
-}
 
 void tcp_connected( void *arg )
 {
@@ -172,12 +162,9 @@ void tcp_connected( void *arg )
   espconn_regist_sentcb( conn, data_sent);
   
   //Start os task
-  system_os_task(user_procTask, user_procTaskPrio,user_procTaskQueue, user_procTaskQueueLen);
-  system_os_post(user_procTaskPrio, 0, 0 );
-  
-#ifdef TEST
-  test_send_test_data(arg);
-#endif
+  system_os_task(feed_task, feed_taskPrio,feed_taskQueue, feed_taskQueueLen);
+  system_os_post(feed_taskPrio, 0, 0 );
+
 }
 
 void tcp_connect_start( void *arg )
@@ -226,6 +213,8 @@ void dns_done( const char *name, ip_addr_t *ipaddr, void *arg )
 
 void test_start(const char *_server, int _port)
 {
+  CreateMutux(&m_mutex);
+  fifo_init(&m_fifo, m_buffer, MAX_BUFFER_SIZE+1);
   
   os_timer_disarm(&second_timer);
   os_timer_setfn(&second_timer, (os_timer_func_t *) second_cb, NULL);
