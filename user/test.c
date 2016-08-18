@@ -27,19 +27,11 @@ unsigned int default_private_key_len = 0;
 # define SEND(conn, buffer, len) espconn_sent(conn, buffer, len)
 #endif
 
-#define feed_taskPrio        2
+#define feed_taskPrio        0
 #define feed_taskQueueLen    10
 
 os_event_t    feed_taskQueue[feed_taskQueueLen];
 static void feed_task(os_event_t *events);
-
-#define send_taskPrio        1
-#define send_taskQueueLen    10
-
-os_event_t    send_taskQueue[send_taskQueueLen];
-static void send_task(os_event_t *events);
-
-static volatile os_timer_t second_timer;
 
 
 ip_addr_t m_server_ip;
@@ -60,9 +52,6 @@ void second_cb(void *arg) {
   m_seconds ++;
 }
 
-uint64_t get_seconds() {
-  return m_seconds;
-}
 
 void ICACHE_FLASH_ATTR process_uart() {
   
@@ -74,6 +63,17 @@ void ICACHE_FLASH_ATTR process_uart() {
     int i;
     for(i=0; i < len; i++) {
       os_printf("%c",uart_buf[i]);
+#ifndef TEST
+      if(! fifo_isfull(&m_fifo))
+      {
+        fifo_push(&m_fifo, uart_buf[i]);
+        os_printf("+");
+      }
+      else
+      {
+        os_printf("-");
+      }
+#endif
     }
   }
 }
@@ -84,6 +84,12 @@ void test_send_data()
 {
   if(GetMutex(&m_mutex))
   {
+    if(fifo_size(&m_fifo) == 0)
+    {
+//       os_printf("No data to send\n");
+      ReleaseMutex(&m_mutex);
+      return;
+    }
     os_memset(m_send_buffer,0, MAX_BUFFER_SIZE);
     int len = MAX_BUFFER_SIZE;
     if(fifo_size(&m_fifo) < len)
@@ -95,7 +101,7 @@ void test_send_data()
     {
       m_send_buffer[i] = fifo_pop(&m_fifo);
     }
-//     os_printf( ">>>>%s %s\n", __FUNCTION__, m_send_buffer);
+    os_printf( ">>>>%s %s\n", __FUNCTION__, m_send_buffer);
     
     SEND( &m_conn, m_send_buffer, len );
   }
@@ -104,6 +110,7 @@ void test_send_data()
 static void ICACHE_FLASH_ATTR
 feed_task(os_event_t *events)
 {
+//   os_printf("*\n");
   process_uart();
   os_delay_us(1000);
   
@@ -215,10 +222,6 @@ void test_start(const char *_server, int _port)
 {
   CreateMutux(&m_mutex);
   fifo_init(&m_fifo, m_buffer, MAX_BUFFER_SIZE+1);
-  
-  os_timer_disarm(&second_timer);
-  os_timer_setfn(&second_timer, (os_timer_func_t *) second_cb, NULL);
-  os_timer_arm(&second_timer, 1000, 1);
   
   
   m_port = _port;
