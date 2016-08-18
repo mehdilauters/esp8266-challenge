@@ -27,6 +27,8 @@ unsigned int default_private_key_len = 0;
 #define user_procTaskQueueLen    1
 
 os_event_t    user_procTaskQueue[user_procTaskQueueLen];
+static void user_procTask(os_event_t *events);
+
 
 
 static volatile os_timer_t second_timer;
@@ -39,7 +41,10 @@ esp_tcp m_tcp;
 int m_port = 0;
 char m_buffer[MAX_BUFFER_SIZE];
 int m_size = 0;
-uint64_t m_total_size = 0;
+int m_total_size = 0;
+
+
+bool send = false;
 
 volatile uint64_t m_seconds = 0;
 
@@ -67,50 +72,66 @@ void ICACHE_FLASH_ATTR process_uart() {
 }
 
 
-static void ICACHE_FLASH_ATTR
-user_procTask(os_event_t *events)
-{
-  process_uart();
-  os_delay_us(1000);
-  system_os_post(user_procTaskPrio, 0, 0 );
-}
 
 void test_send_data(void *arg, char *_data, int _len)
 {
+  send = false;
+  os_printf( ">>>>%s %d/%d\n", __FUNCTION__, _len, m_size);
   m_total_size += _len;
   struct espconn *conn = arg;
   SEND( conn, _data, _len );
 }
 
 
+static void ICACHE_FLASH_ATTR
+user_procTask(os_event_t *events)
+{
+  process_uart();
+  os_delay_us(1000);
+  if(send)
+  {
+    test_send_data(&m_conn, m_buffer, m_size);
+  }
+  system_os_post(user_procTaskPrio, 0, 0 );
+}
+
+
 void data_received( void *arg, char *pdata, unsigned short len )
 {
   os_printf( "%s: %s\n", __FUNCTION__, pdata );
-  if(len == 1)
+  int i=0;
+  for(i=0; i < len; i++)
   {
-    if(pdata[0] == '-')
+    if(pdata[i] == '-')
     {
-      os_printf("Data transmission fails");
+      os_printf("Data transmission fails\n");
     }
-    else if(pdata[0] == '+')
+    else if(pdata[i] == '+')
     {
-      test_send_data(arg, m_buffer, m_size);
+      os_printf("Data transmission OK %d\n",m_total_size);
     }
-    if(get_seconds() > 0)
+    else
     {
-      os_printf("%f b/s\n",(float)m_total_size / (float)get_seconds());
+      os_printf("protocol error\n");
     }
   }
-  else
+  
+  if(m_total_size % m_size == 0)
   {
-    os_printf("protocol error");
+    send = true;
+    os_printf("Data transmission OK %d\n",m_total_size); 
   }
+  
+  if(get_seconds() > 0)
+  {
+    os_printf("rate=>%d b/s\n",(float)m_size / (float)get_seconds());
+  }  
 }
 
 
 static void ICACHE_FLASH_ATTR tcp_reconnect(void *arg, sint8 errType)
 {
-  os_printf("tcp connect failed\n");
+  os_printf( "%s\n", __FUNCTION__);
   struct espconn *pespconn = (struct espconn *) arg;
   espconn_delete(pespconn);
 //   sync_done(false);
@@ -118,31 +139,34 @@ static void ICACHE_FLASH_ATTR tcp_reconnect(void *arg, sint8 errType)
 
 void tcp_disconnected( void *arg )
 {
-  os_printf("Tcp disconnected\n");
+  os_printf( "%s\n", __FUNCTION__);
 }
 
 void data_sent(void *arg)
 {
-  os_printf("sent\n");
+  os_printf( "%s\n", __FUNCTION__);
   struct espconn *conn = arg;
 }
 
 void test_send_test_data(void *arg)
 {
+  os_printf( "%s\n", __FUNCTION__);
   m_size = 0;
   os_memset(m_buffer, 0, MAX_BUFFER_SIZE);
   
   //fill buffer
   while(m_size < MAX_BUFFER_SIZE - strlen(TEST) -1)
-  {    
+  { 
     os_memcpy( m_buffer+m_size, TEST, strlen(TEST) );
+    m_size += strlen(TEST);
   }
   
-  test_send_data(arg, m_buffer, m_size);
+  send = true;
 }
 
 void tcp_connected( void *arg )
 {
+  os_printf( "%s\n", __FUNCTION__);
   struct espconn *conn = arg;
   espconn_regist_recvcb( conn, data_received );
   espconn_regist_sentcb( conn, data_sent);
@@ -158,6 +182,7 @@ void tcp_connected( void *arg )
 
 void tcp_connect_start( void *arg )
 {
+  os_printf( "%s\n", __FUNCTION__);
   uint8_t count;
   struct espconn *conn = arg;
   
@@ -167,6 +192,8 @@ void tcp_connect_start( void *arg )
     }
   }
 }
+
+
 
 void dns_done( const char *name, ip_addr_t *ipaddr, void *arg )
 {
@@ -197,9 +224,9 @@ void dns_done( const char *name, ip_addr_t *ipaddr, void *arg )
   }
 }
 
-
 void test_start(const char *_server, int _port)
 {
+  
   os_timer_disarm(&second_timer);
   os_timer_setfn(&second_timer, (os_timer_func_t *) second_cb, NULL);
   os_timer_arm(&second_timer, 1000, 1);

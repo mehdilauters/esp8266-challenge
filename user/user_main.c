@@ -8,11 +8,6 @@
 #include "user_interface.h"
 
 
-#define user_procTaskPrio        0
-#define user_procTaskQueueLen    1
-
-os_event_t    user_procTaskQueue[user_procTaskQueueLen];
-static void user_procTask(os_event_t *events);
 
 void user_rf_pre_init(void) {
 }
