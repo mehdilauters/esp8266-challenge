@@ -15,25 +15,34 @@ f = None
 if not test:
   f = open('/tmp/out.bin','w')
 
-server_address = (server_name, 8888)
+server_address = (server_name, 6677)
 print >>sys.stderr, 'starting up on %s port %s' % server_address
 sock.bind(server_address)
 sock.listen(1)
+sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
 while True:
   print >>sys.stderr, 'waiting for a connection'
   connection, client_address = sock.accept()
+  print >>sys.stderr, 'client connected:', client_address
+  
   try:
     if test:
-      print >>sys.stderr, 'client connected:', client_address
+      index = 0
       while True:
-        data = connection.recv(len(TEST))
-        if data != TEST:
-          print "error"
-          connection.sendall("-")
-          print >>sys.stderr, 'received "%s"' % data
-        else:
+        err = False
+        data = connection.recv(9999)
+        for c in data:
+          needed = TEST[index%(len(TEST))]
+          if c != needed:
+            err = True
+          if err:
+            print "%s != %s"%(c,needed)
+            connection.sendall("-")
+          else:
             connection.sendall("+")
+          index += 1
+        print ">%s<"%data
     else:
       while True:
         data = connection.recv(9999)
@@ -42,5 +51,6 @@ while True:
         print >>sys.stderr, 'received "%s"' % data
 
   finally:
-      f.close()
+      if f is not None:
+        f.close()
       connection.close()
