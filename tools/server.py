@@ -40,8 +40,7 @@ while True:
         f.write(data)
         connection.sendall("+")
         print >>sys.stderr, 'received "%s"' % data
-        else:
-            connection.sendall("+")
+
   finally:
       f.close()
       connection.close()
