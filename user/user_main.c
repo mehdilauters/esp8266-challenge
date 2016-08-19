@@ -29,11 +29,11 @@ void wifi_callback( System_Event_t *evt )
     
     case EVENT_STAMODE_GOT_IP:
     {
-      os_printf("ip:" IPSTR ",mask:" IPSTR ",gw:" IPSTR,
+      DEBUG("ip:" IPSTR ",mask:" IPSTR ",gw:" IPSTR,
         IP2STR(&evt->event_info.got_ip.ip),
         IP2STR(&evt->event_info.got_ip.mask),
         IP2STR(&evt->event_info.got_ip.gw));
-      os_printf("\n");
+      DEBUG("\n");
       test_start(SERVER, PORT);
       
       break;
@@ -64,7 +64,7 @@ void ICACHE_FLASH_ATTR
 user_init()
 {
   uart_init(BIT_RATE_115200, BIT_RATE_115200);
-  os_printf("Hello\n");
+  DEBUG("Hello\n");
   
   connect(ESSID, PWD);
 }

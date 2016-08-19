@@ -62,17 +62,17 @@ void ICACHE_FLASH_ATTR process_uart() {
   {
     int i;
     for(i=0; i < len; i++) {
-      os_printf("%c",uart_buf[i]);
 #ifndef TEST
       if(! fifo_isfull(&m_fifo))
       {
         fifo_push(&m_fifo, uart_buf[i]);
-        os_printf("+");
       }
-      else
+      if( fifo_freespace(&m_fifo) < MAX_BUFFER_SIZE / 4)
       {
-        os_printf("-");
+        os_printf("-\n");
       }
+#else
+  DEBUG("%c",uart_buf[i]);
 #endif
     }
   }
@@ -86,7 +86,7 @@ void test_send_data()
   {
     if(fifo_size(&m_fifo) == 0)
     {
-//       os_printf("No data to send\n");
+//       DEBUG("No data to send\n");
       ReleaseMutex(&m_mutex);
       return;
     }
@@ -101,7 +101,7 @@ void test_send_data()
     {
       m_send_buffer[i] = fifo_pop(&m_fifo);
     }
-    os_printf( ">>>>%s %s\n", __FUNCTION__, m_send_buffer);
+    DEBUG( ">>>>%s %s\n", __FUNCTION__, m_send_buffer);
     
     SEND( &m_conn, m_send_buffer, len );
   }
@@ -110,7 +110,7 @@ void test_send_data()
 static void ICACHE_FLASH_ATTR
 feed_task(os_event_t *events)
 {
-//   os_printf("*\n");
+//   DEBUG("*\n");
   process_uart();
   os_delay_us(1000);
   
@@ -136,13 +136,13 @@ feed_task(os_event_t *events)
 
 void data_received( void *arg, char *pdata, unsigned short len )
 {
-  os_printf( "%s: %s\n", __FUNCTION__, pdata );
+  DEBUG( "%s \n", __FUNCTION__);
 }
 
 
 static void ICACHE_FLASH_ATTR tcp_reconnect(void *arg, sint8 errType)
 {
-  os_printf( "%s\n", __FUNCTION__);
+  DEBUG( "%s\n", __FUNCTION__);
   struct espconn *pespconn = (struct espconn *) arg;
   espconn_delete(pespconn);
 //   sync_done(false);
@@ -150,20 +150,21 @@ static void ICACHE_FLASH_ATTR tcp_reconnect(void *arg, sint8 errType)
 
 void tcp_disconnected( void *arg )
 {
-  os_printf( "%s\n", __FUNCTION__);
+  DEBUG( "%s\n", __FUNCTION__);
 }
 
 void data_sent(void *arg)
 {
   ReleaseMutex(&m_mutex);
-  os_printf( "%s\n", __FUNCTION__);
+  DEBUG( "%s\n", __FUNCTION__);
   struct espconn *conn = arg;
+  os_printf("+\n");
 }
 
 
 void tcp_connected( void *arg )
 {
-  os_printf( "%s\n", __FUNCTION__);
+  DEBUG( "%s\n", __FUNCTION__);
   struct espconn *conn = arg;
   espconn_regist_recvcb( conn, data_received );
   espconn_regist_sentcb( conn, data_sent);
@@ -176,7 +177,7 @@ void tcp_connected( void *arg )
 
 void tcp_connect_start( void *arg )
 {
-  os_printf( "%s\n", __FUNCTION__);
+  DEBUG( "%s\n", __FUNCTION__);
   uint8_t count;
   struct espconn *conn = arg;
   
@@ -193,11 +194,11 @@ void dns_done( const char *name, ip_addr_t *ipaddr, void *arg )
 {
   if ( ipaddr == NULL) 
   {
-    os_printf("DNS lookup failed\n");
+    DEBUG("DNS lookup failed\n");
   }
   else
   {
-    os_printf("found server %d.%d.%d.%d\n",
+    DEBUG("found server %d.%d.%d.%d\n",
               *((uint8 *)&ipaddr->addr), *((uint8 *)&ipaddr->addr + 1), *((uint8 *)&ipaddr->addr + 2), *((uint8 *)&ipaddr->addr + 3));
     
     struct espconn *conn = arg;
@@ -227,6 +228,6 @@ void test_start(const char *_server, int _port)
   m_port = _port;
   err_t res = espconn_gethostbyname( &m_conn, _server, &m_server_ip, dns_done );
   if(res != ESPCONN_OK && res != ESPCONN_INPROGRESS) {
-    os_printf("DNS error %d\n",res);
+    DEBUG("DNS error %d\n",res);
   }
 }
