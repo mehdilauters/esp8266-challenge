@@ -13,4 +13,7 @@
 #define MAX_TRIES 5
 #define MAX_BUFFER_SIZE 1024
 
+// #define DEBUG os_printf
+#define DEBUG 
+
 #endif
