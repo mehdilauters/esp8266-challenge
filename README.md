@@ -91,3 +91,10 @@ Afin d'améliorer les résultats, il faudrait:
 - refaire les tests sur un serveur local, sans passer par internet
 - Améliorer le protocole TCP ( retransmettre en cas d'erreur, rajouter de la correction d'erreur, crc...)
 - Améliorer le protocole série ( plus d'échange sur la quantité de donnée à envoyer, afin de remplir au maximum la fifo)
+
+## Approfondissement
+### Mise en place du contrôle de flux hardware ( RTS / CTS )
+
+La mise en place du contrôle hardware de flux permettrait d'enlever le "protocole" de transfert au niveau logiciel
+Supporté par le processeur, mais pins non exportées sur l'esp8266-01 ( [esp8266_gpio_pin_allocations](http://www.esp8266.com/wiki/doku.php?id=esp8266_gpio_pin_allocations) )
+
