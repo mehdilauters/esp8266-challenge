@@ -62,12 +62,25 @@ while True:
           end = time.time()
           #if (index % 10) == 0:
           t = end-start
-          print "%s byte %s seconds => %fB/s (%s %% errors)"%(index, t, (float(index) / float(t)), float(errors)/float(index))
+          if t != 0 and index != 0:
+            print "%s byte %s seconds => %fB/s (%s %% errors)"%(index, t, (float(index) / float(t)), float(errors)/float(index))
     else:
+      index = 0
       while True:
         data = connection.recv(9999)
-        f.write(data)
-        connection.sendall("+")
+        if data:
+          f.write(data)
+          index += len(data)
+          connection.sendall("+")
+          
+          if start is None:
+            start = time.time();
+          end = time.time()
+          t = end - start
+          if t != 0 and index != 0:
+            print "%s byte %s seconds => %fB/s"%(index, t, (float(index) / float(t)))
+        else:
+          break
 
   finally:
       if f is not None:
