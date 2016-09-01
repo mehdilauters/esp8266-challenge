@@ -63,7 +63,7 @@ bool connect(const char* _essid, const char * _key)
 void ICACHE_FLASH_ATTR
 user_init()
 {
-  uart_init(BIT_RATE_115200, BIT_RATE_115200);
+  uart_init(BIT_RATE_921600, BIT_RATE_921600);
   DEBUG("Hello\n");
   
   connect(ESSID, PWD);

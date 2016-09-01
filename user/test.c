@@ -112,7 +112,7 @@ feed_task(os_event_t *events)
 {
 //   DEBUG("*\n");
   process_uart();
-  os_delay_us(1000);
+  os_delay_us(10);
   
   
 #ifdef TEST

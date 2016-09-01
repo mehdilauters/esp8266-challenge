@@ -1,4 +1,5 @@
 import serial, sys
+import time
 
 
 
@@ -15,10 +16,14 @@ to_send = ''
 total_size = 0
 sent_size = 0
 
+total_wait_time = 0
+total_time = 0
 
-port = serial.Serial(serial_port, baudrate=115200, timeout=3.0)
+port = serial.Serial(serial_port, baudrate=921600, timeout=3.0)
 
 def wait():
+  global total_wait_time
+  start = time.time();
   status = -1
   while status != '+':
     read = port.read(1)
@@ -26,13 +31,17 @@ def wait():
       sys.stdout.write(read)
       for c in read:
         if c == '+':
+          end = time.time()
+          t = end-start
+          total_wait_time += t
           return
 
 with open(filename, 'r') as content_file:
   to_send = content_file.read()
   print "total len %s"%len(to_send)
   total_size = len(to_send)
-    
+
+  start = time.time();
   while sent_size < total_size:
     sending = min(BUFFER_SIZE, total_size - sent_size)
     print "sending %s"%sending
@@ -40,5 +49,7 @@ with open(filename, 'r') as content_file:
     sent_size += sending
     wait()
     print "wait done"
-  print "Done"
+  end = time.time()
+  total_time = end-start
+  print "Done in %s s, waiting %s s"%(total_time, total_wait_time)
 print "exit"

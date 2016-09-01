@@ -95,6 +95,14 @@ Afin d'améliorer les résultats, il faudrait:
 ## Approfondissement
 ### Mise en place du contrôle de flux hardware ( RTS / CTS )
 
-La mise en place du contrôle hardware de flux permettrait d'enlever le "protocole" de transfert au niveau logiciel
+La mise en place du contrôle hardware de flux permettrait d'enlever le "protocole" de transfert au niveau logiciel.
+
 Supporté par le processeur, mais pins non exportées sur l'esp8266-01 ( [esp8266_gpio_pin_allocations](http://www.esp8266.com/wiki/doku.php?id=esp8266_gpio_pin_allocations) )
 
+### Serial protocol
+- Instrumentation de ```serial_send.py```: 97% du temps effectif correspond à l'attente du retour de l'esp8266 (acquittement "+")
+- Désactivation de cette attente, le débit augmente mais le fichier à l'arrivée n'est pas complet: fifo overrun
+
+#### Amélioration
+- mise en place d'un double-buffer
+- Utilisation d'un protocole (zmodem?)
